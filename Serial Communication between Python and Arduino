@@ -1,0 +1,57 @@
+
+import serial
+import csv
+from datetime import datetime
+import os
+
+
+'''
+- Built in tools (arduino serial monitor, serial plotter) don't have auto-save features (need to copy-paste or screenshots)
+- Can't directly access arduino variables with python, must read raw serial data via pyserial from serial monitor
+
+'''
+
+# Configuration based on setup
+SERIAL_PORT = 'COM7'  #PORT arduino is connected to
+BAUD_RATE = 9600
+#make directory for output file explicit
+script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the script's directory
+CSV_FILE = os.path.join(script_dir, 'sensor_data.csv')   # Builds full path
+MAX_LINES = None  # could set a number to stop after that many lines, or None for infinite
+
+ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+print(f"Logging to {CSV_FILE}. Press Ctrl+C to stop.")
+
+#this overwrites existing file , so each time we run should have saved prior data file as another name
+with open(CSV_FILE, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(['Time', 'Mic', 'Temp', 'Humidity', 'Light Level'])  # Headers
+
+    #while we have not reached max lines (or infinite)
+    while MAX_LINES is None or writer.line_num <= MAX_LINES + 1:  # +1 for header
+        try:
+            line = ser.readline().decode('utf-8').strip()
+            if line:
+                # Parse the line: e.g., "1.00, 38.00, 16.00, 2.00"
+                values = [float(v.strip()) for v in line.split(',') if v.strip()]
+
+                if len(values) == 4:
+                    # Get current timestamp with milliseconds
+                    now = datetime.now()
+                    timestamp = now.strftime('%H:%M:%S.') + f'{int(now.microsecond / 1000):03d}'
+
+                    row = [timestamp] + values
+                    writer.writerow(row)
+                    print(row)  # debug statement
+                else:
+                    print(f"Invalid data format: {line}")
+        #keep going except there's a keyboard interrupt
+        except KeyboardInterrupt:
+            break
+        except ValueError as ve:
+            print(f"Parsing error: {ve} - Line: {line}")
+        except Exception as e:
+            print(f"Error: {e}")
+
+ser.close()
+print("Logging stopped.")
