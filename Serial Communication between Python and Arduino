@@ -1,25 +1,31 @@
 
 import serial
 import csv
-from datetime import datetime
+from datetime import datetime #used to generate timestamps with milliseconds precision
 import os
 
 
 '''
 - Built in tools (arduino serial monitor, serial plotter) don't have auto-save features (need to copy-paste or screenshots)
-- Can't directly access arduino variables with python, must read raw serial data via pyserial from serial monitor
+- Can't directly access arduino variables (memory) with python, must read raw serial data via pyserial from serial monitor
+- for csv library docs see:https://www.geeksforgeeks.org/python/writing-csv-files-in-python/
+- This code turns the expected arduino output: "1.00, 38.00, 16.00, 2.00" (mic, temp, humidity, light level)
+  into a csv file with timestamp: [12:34:56.789 1.00 38.00 16.00 2.00]
+- Timestamp note: python script isn't pulling timestime from Arduino output because Arduino sketch doesn't send timestamps, instead 
+   the script adds timestamps each time a new line of data is received and parsed
 
-'''
+   '''
 
 # Configuration based on setup
 SERIAL_PORT = 'COM7'  #PORT arduino is connected to
-BAUD_RATE = 9600
+BAUD_RATE = 9600 #communication speed to match arduino's: Serial.begin(9600);
+
 #make directory for output file explicit
 script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the script's directory
 CSV_FILE = os.path.join(script_dir, 'sensor_data.csv')   # Builds full path
 MAX_LINES = None  # could set a number to stop after that many lines, or None for infinite
 
-ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1) #create serial object
 print(f"Logging to {CSV_FILE}. Press Ctrl+C to stop.")
 
 #this overwrites existing file , so each time we run should have saved prior data file as another name
@@ -32,26 +38,26 @@ with open(CSV_FILE, 'w', newline='') as csvfile:
         try:
             line = ser.readline().decode('utf-8').strip()
             if line:
-                # Parse the line: e.g., "1.00, 38.00, 16.00, 2.00"
-                values = [float(v.strip()) for v in line.split(',') if v.strip()]
+                # Parse the line: turn "1.00, 38.00, 16.00, 2.00" --> "1.00, 38.00, 16.00, 2.00"
+                values = [float(v.strip()) for v in line.split(',') if v.strip()] #remove extra spaces and split by commas
 
-                if len(values) == 4:
+                if len(values) == 4: #matches number of expected sensor values
                     # Get current timestamp with milliseconds
                     now = datetime.now()
                     timestamp = now.strftime('%H:%M:%S.') + f'{int(now.microsecond / 1000):03d}'
 
-                    row = [timestamp] + values
+                    row = [timestamp] + values #prepend timestamp to sensor values
                     writer.writerow(row)
                     print(row)  # debug statement
                 else:
                     print(f"Invalid data format: {line}")
         #keep going except there's a keyboard interrupt
-        except KeyboardInterrupt:
+        except KeyboardInterrupt: #for Ctrl+C
             break
         except ValueError as ve:
             print(f"Parsing error: {ve} - Line: {line}")
         except Exception as e:
             print(f"Error: {e}")
 
-ser.close()
+ser.close() #close serial port, reallow others to use it (ie. open arduino IDE serial monitor)
 print("Logging stopped.")
